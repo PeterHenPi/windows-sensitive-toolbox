@@ -1,0 +1,4 @@
+﻿level,priority,keyword,matchMode,enabled,category,notes
+一级,100,登录密码,contains,1,credential,synthetic_example
+二级,80,演示客户名单,contains,1,business,synthetic_example
+二级,80,演示工资表,contains,1,hr,synthetic_example

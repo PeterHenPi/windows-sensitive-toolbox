@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>敏感文件工具箱</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">密</div>
+        <div>
+          <h1>敏感文件工具箱</h1>
+          <p>本机运行，不上传文件</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="home">首页</button>
+        <button class="nav-item" data-view="scan">敏感文件扫描</button>
+        <button class="nav-item" data-view="label">批量添加商密标签</button>
+        <button class="nav-item" data-view="ruleTest">规则测试器</button>
+        <button class="nav-item" data-view="environment">环境检测</button>
+        <button class="nav-item" data-view="history">历史记录</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section id="home" class="view active">
+        <div class="page-title">
+          <div>
+            <h2>选择要处理的功能</h2>
+            <p>扫描和加标签是两个独立功能。加标签默认只处理文件，并且必须先预览。</p>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <button class="tool-card" data-view-target="scan">
+            <span class="tool-icon">01</span>
+            <strong>敏感文件扫描</strong>
+            <small>按规则扫描目录，生成 CSV 报告和结果摘要。</small>
+          </button>
+          <button class="tool-card" data-view-target="label">
+            <span class="tool-icon">02</span>
+            <strong>批量添加商密标签</strong>
+            <small>先预览新文件名，再确认执行批量改名。</small>
+          </button>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3>最近任务</h3>
+            <button class="ghost" data-refresh-history>刷新</button>
+          </div>
+          <div id="recentTasks" class="history-list empty">暂无任务记录</div>
+        </div>
+      </section>
+
+      <section id="scan" class="view">
+        <div class="page-title">
+          <div>
+            <h2>敏感文件扫描</h2>
+            <p>快速扫描只检查文件名；深度扫描会在本机读取文档文本，不上传文件，也不会修改文件。</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field wide">
+            <span>扫描模式</span>
+            <div class="segmented" role="radiogroup" aria-label="扫描模式">
+              <label>
+                <input type="radio" name="scanMode" value="filename" checked>
+                <span>快速扫描：只检查文件名</span>
+              </label>
+              <label>
+                <input type="radio" name="scanMode" value="content">
+                <span>深度扫描：文件名 + 文档内容</span>
+              </label>
+            </div>
+          </div>
+
+          <label class="field wide">
+            <span>扫描目录</span>
+            <div class="input-row">
+              <input id="scanPath" type="text" placeholder="例如 D:\Data">
+              <button class="secondary" data-pick="folder" data-target="scanPath">浏览</button>
+            </div>
+          </label>
+
+          <label class="field wide">
+            <span>规则文件</span>
+            <div class="input-row">
+              <input id="configPath" type="text" placeholder="例如 D:\tools\keywords.sample.csv">
+              <button class="secondary" data-pick="file" data-target="configPath">浏览</button>
+            </div>
+          </label>
+
+          <label class="field wide">
+            <span>排除目录，可选，每行一个</span>
+            <textarea id="excludePaths" rows="3" placeholder="例如 D:\Data\Archive"></textarea>
+          </label>
+
+          <label class="check">
+            <input id="scanRecurse" type="checkbox" checked>
+            <span>递归扫描子目录</span>
+          </label>
+
+          <div id="contentOptions" class="advanced-panel wide hidden">
+            <div class="notice">
+              深度扫描按当前规则匹配文档文本。超过大小限制或不支持的文件会记录跳过原因；“未命中”表示按当前规则未发现。
+            </div>
+            <label class="field">
+              <span>内容扫描文件类型</span>
+              <input id="contentExtensions" type="text" value="doc,docx,xls,xlsx,ppt,pptx,pdf,txt,csv">
+            </label>
+            <label class="field">
+              <span>大文件限制 MB</span>
+              <input id="maxContentFileSizeMB" type="text" value="50">
+            </label>
+            <label class="field">
+              <span>单文件提取超时秒</span>
+              <input id="extractionTimeoutSeconds" type="text" value="60">
+            </label>
+            <label class="check">
+              <input id="scanIncremental" type="checkbox" checked>
+              <span>启用增量扫描，跳过未变化文件</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button id="startScan" class="primary">开始扫描</button>
+          <button id="cancelScan" class="danger" disabled>取消扫描</button>
+          <button class="ghost" data-open-current="scan">打开任务目录</button>
+        </div>
+
+        <div class="status-panel" id="scanStatus">
+          <div class="status-line">等待开始</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>扫描结果摘要</h3>
+          </div>
+          <div id="scanSummary" class="summary-grid"></div>
+          <div id="scanSamples" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section id="label" class="view">
+        <div class="page-title">
+          <div>
+            <h2>批量添加商密标签</h2>
+            <p>先生成预览表，确认无误后再执行。正式执行会保存回滚记录。</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label class="field wide">
+            <span>处理目录</span>
+            <div class="input-row">
+              <input id="labelRoot" type="text" placeholder="例如 D:\Data\Project">
+              <button class="secondary" data-pick="folder" data-target="labelRoot">浏览</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>标签内容</span>
+            <input id="labelText" type="text" value="商密二级">
+          </label>
+
+          <label class="field">
+            <span>标签位置</span>
+            <select id="labelStyle">
+              <option value="Suffix">后缀：合同_商密二级.docx</option>
+              <option value="Prefix">前缀：【商密二级】合同.docx</option>
+            </select>
+          </label>
+
+          <label class="check">
+            <input id="labelRecurse" type="checkbox" checked>
+            <span>递归处理子目录</span>
+          </label>
+
+          <label class="check">
+            <input id="includeFiles" type="checkbox" checked>
+            <span>处理文件</span>
+          </label>
+
+          <label class="check warning-check">
+            <input id="includeFolders" type="checkbox">
+            <span>处理文件夹</span>
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button id="startPreview" class="primary">生成预览</button>
+          <button id="applyLabel" class="danger" disabled>确认执行加标签</button>
+          <button class="ghost" data-open-current="label">打开任务目录</button>
+        </div>
+
+        <div class="status-panel" id="labelStatus">
+          <div class="status-line">等待生成预览</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>预览结果</h3>
+            <div class="table-tools">
+              <button class="ghost small" id="selectAllRows">全选可处理</button>
+              <button class="ghost small" id="clearRows">清空选择</button>
+            </div>
+          </div>
+          <div id="labelSummary" class="summary-grid"></div>
+          <div id="labelPreview" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section id="ruleTest" class="view">
+        <div class="page-title">
+          <div>
+            <h2>规则测试器</h2>
+            <p>输入文件名或文本，检查当前规则会命中哪些密级、关键词和匹配范围。</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label class="field wide">
+            <span>规则文件</span>
+            <div class="input-row">
+              <input id="ruleTestConfigPath" type="text" placeholder="例如 D:\tools\keywords.sample.csv">
+              <button class="secondary" data-pick="file" data-target="ruleTestConfigPath">浏览</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>测试范围</span>
+            <select id="ruleTestScope">
+              <option value="name">文件名</option>
+              <option value="content">内容</option>
+              <option value="both">两者</option>
+            </select>
+          </label>
+
+          <label class="field wide">
+            <span>测试文本</span>
+            <textarea id="ruleTestText" rows="5" placeholder="例如 客户名单2025.xlsx，或粘贴一小段文本"></textarea>
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button id="runRuleTest" class="primary">测试规则</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>测试结果</h3>
+          </div>
+          <div id="ruleTestSummary" class="summary-grid"></div>
+          <div id="ruleTestResults" class="table-wrap">等待测试</div>
+        </div>
+      </section>
+
+      <section id="environment" class="view">
+        <div class="page-title">
+          <div>
+            <h2>环境检测</h2>
+            <p>检查脚本、任务目录、Office/PDF 提取组件等是否可用。</p>
+          </div>
+          <button id="runEnvCheck" class="secondary">开始检测</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h3>检测结果</h3>
+          </div>
+          <div id="envResults" class="table-wrap">等待检测</div>
+        </div>
+      </section>
+
+      <section id="history" class="view">
+        <div class="page-title">
+          <div>
+            <h2>历史记录</h2>
+            <p>每次任务都会保存在独立目录，包含报告、日志和回滚记录。</p>
+          </div>
+          <button class="secondary" data-refresh-history>刷新</button>
+        </div>
+        <div id="historyList" class="history-list empty">暂无任务记录</div>
+      </section>
+    </main>
+  </div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-body">
+      <h3>确认执行加标签</h3>
+      <p id="confirmText"></p>
+      <div class="modal-actions">
+        <button class="ghost" id="cancelApply">取消</button>
+        <button class="danger" id="confirmApply">确认执行</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rollbackModal" class="modal hidden">
+    <div class="modal-body">
+      <h3>确认回滚加标签</h3>
+      <p id="rollbackText"></p>
+      <div class="modal-actions">
+        <button class="ghost" id="cancelRollback">取消</button>
+        <button class="danger" id="confirmRollback">确认回滚</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

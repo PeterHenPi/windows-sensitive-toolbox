@@ -1,0 +1,15 @@
+﻿level,priority,keyword,matchScope,matchMode,piiType,enabled,category,notes
+一级,100,登录密码,both,contains,,1,credential,fixed_keyword
+一级,100,root_password,both,contains,,1,credential,fixed_keyword
+二级,80,工资表,name,contains,,1,hr,file_name_only
+二级,80,第[0-9一二三四五六七八九十百千万]+届董事会第[0-9一二三四五六七八九十百千万]+次会议,both,regex,,1,meeting,variable_pattern
+二级,80,客户名单,content,contains,,1,business,content_keyword
+二级,80,AKIA[0-9A-Z]{16},content,regex,,1,credential,aws_access_key_pattern
+一级,100,,content,contains,cn_id_card,1,pii,china_id_card
+二级,80,,content,contains,cn_mobile,1,pii,china_mobile
+二级,80,,content,contains,email,1,pii,email
+一级,100,,content,contains,bank_card,1,pii,bank_card_luhn
+二级,80,,content,contains,passport,1,pii,passport_pattern
+一级,100,,content,contains,cn_name_mobile_id_combo,1,pii,name_mobile_id_combo
+一级,100,,content,contains,cn_name_id_combo,1,pii,name_id_combo
+二级,80,,content,contains,cn_name_mobile_combo,1,pii,name_mobile_combo
