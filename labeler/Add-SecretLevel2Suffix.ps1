@@ -1,6 +1,5 @@
 ﻿param(
     [Parameter(Mandatory = $true)]
-    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Container })]
     [string]$RootPath,
 
     [string]$Suffix = "_$([char]0x5546)$([char]0x5BC6)$([char]0x4E8C)$([char]0x7EA7)",
@@ -68,7 +67,8 @@ function Invoke-RenameItem {
         [System.IO.FileSystemInfo]$Item
     )
 
-    if ($Item.PSIsContainer) {
+    $isDirectory = ($Item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0
+    if ($isDirectory) {
         if ($Item.Name.EndsWith($Suffix)) {
             Write-Host "Skip already labeled: $($Item.FullName)"
             return
@@ -89,7 +89,7 @@ function Invoke-RenameItem {
         $parentPath = $Item.Directory.FullName
     }
 
-    $newPath = Join-Path -Path $parentPath -ChildPath $newName
+    $newPath = $parentPath.TrimEnd('\') + '\' + $newName
 
     if (Test-AnyPathExists -Path $newPath) {
         Write-Warning "Target already exists, skipped: $newPath"
@@ -102,13 +102,13 @@ function Invoke-RenameItem {
     }
 
     try {
-        Rename-PathWithLongPathSupport -SourcePath $Item.FullName -TargetPath $newPath -IsDirectory ([bool]$Item.PSIsContainer)
+        Rename-PathWithLongPathSupport -SourcePath $Item.FullName -TargetPath $newPath -IsDirectory $isDirectory
         Write-Host "Renamed: $($Item.FullName) -> $newPath"
     } catch {
         $failure = [PSCustomObject]@{
             SourcePath = $Item.FullName
             TargetPath = $newPath
-            ItemType = $(if ($Item.PSIsContainer) { "Directory" } else { "File" })
+            ItemType = $(if ($isDirectory) { "Directory" } else { "File" })
             ErrorMessage = $_.Exception.Message
         }
         $script:failures.Add($failure) | Out-Null
@@ -116,7 +116,14 @@ function Invoke-RenameItem {
     }
 }
 
-$resolvedRoot = (Resolve-Path -LiteralPath $RootPath).Path
+$resolvedRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RootPath)
+$longRoot = Convert-ToLongPath -Path $resolvedRoot
+if (-not [System.IO.Directory]::Exists($longRoot)) {
+    throw "Root directory is missing or inaccessible: $resolvedRoot"
+}
+if ([string]::IsNullOrWhiteSpace($Suffix)) {
+    throw "Suffix must not be empty."
+}
 
 Write-Host "RootPath: $resolvedRoot"
 Write-Host "Suffix: $Suffix"
@@ -127,21 +134,50 @@ if ($Preview) {
 }
 Write-Host ""
 
-# Do not rename the root directory itself.
-# Rename files first, then folders, so folder renames never invalidate file paths.
-$files = Get-ChildItem -LiteralPath $resolvedRoot -Recurse -Force |
-    Where-Object { -not $_.PSIsContainer } |
-    Sort-Object { $_.FullName.Length } -Descending
+# Snapshot the tree with extended paths before any rename takes place.
+$files = New-Object System.Collections.Generic.List[object]
+$folders = New-Object System.Collections.Generic.List[object]
+$pending = New-Object System.Collections.Generic.Stack[string]
+$pending.Push($longRoot)
+while ($pending.Count -gt 0) {
+    $scanPath = $pending.Pop()
+    try {
+        $directory = New-Object System.IO.DirectoryInfo -ArgumentList $scanPath
+        $entries = $directory.GetFileSystemInfos()
+    } catch {
+        $failures.Add([PSCustomObject]@{
+            SourcePath = $scanPath
+            TargetPath = ""
+            ItemType = "ScanDirectory"
+            ErrorMessage = $_.Exception.Message
+        })
+        Write-Warning "Cannot scan: $scanPath. Error: $($_.Exception.Message)"
+        continue
+    }
+    foreach ($entry in $entries) {
+        if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            $failures.Add([PSCustomObject]@{
+                SourcePath = $entry.FullName
+                TargetPath = ""
+                ItemType = "ReparsePointSkipped"
+                ErrorMessage = "Link or junction skipped; review separately."
+            })
+            continue
+        }
+        if (($entry.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
+            $folders.Add($entry)
+            $pending.Push($entry.FullName)
+        } else {
+            $files.Add($entry)
+        }
+    }
+}
 
 foreach ($file in $files) {
     Invoke-RenameItem -Item $file
 }
 
-$folders = Get-ChildItem -LiteralPath $resolvedRoot -Recurse -Force |
-    Where-Object { $_.PSIsContainer } |
-    Sort-Object { $_.FullName.Length } -Descending
-
-foreach ($folder in $folders) {
+foreach ($folder in ($folders | Sort-Object { $_.FullName.Length } -Descending)) {
     Invoke-RenameItem -Item $folder
 }
 

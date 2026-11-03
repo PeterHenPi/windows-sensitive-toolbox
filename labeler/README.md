@@ -1,49 +1,53 @@
-# Windows 商密文件批量打标签脚本
+# 批量给文件加商密标签
 
-用途：业务只在最顶层文件夹名前面标注 `【商密二级】` 时，用本脚本递归给该文件夹下面的所有子文件和子文件夹名称前面加上同样标识。
+根据“批量给文件加商密标签”对话整理，2026-11-03 同步后缀版长路径扫描修复。适用于已经由业务确认密级的 Windows 文件目录，递归修改子文件、子文件夹名称；不会修改指定的根目录本身，也不会自动判断文件密级。
 
-## 文件
+| 脚本 | 命名示例 | 特点 |
+| --- | --- | --- |
+| [Add-SecretLevel2Label.ps1](Add-SecretLevel2Label.ps1) | `报告.docx` → `【商密二级】报告.docx` | 基础前缀版；使用普通递归扫描 |
+| [Add-SecretLevel2Suffix.ps1](Add-SecretLevel2Suffix.ps1) | `报告.docx` → `报告_商密二级.docx` | 扩展名前追加；扫描和重命名使用 Windows 扩展路径；记录扫描/改名失败和跳过的链接 |
 
-- `Add-SecretLevel2Label.ps1`：PowerShell 脚本。
-- `Add-SecretLevel2Suffix.ps1`：把标签追加到文件名末尾、扩展名前面的 PowerShell 脚本。
+这些是独立脚本，与网页执行器分别实现。网页工具的回滚记录不适用于这里的独立脚本；独立脚本不提供自动回滚。
 
-## 预演执行
+## 运行
 
-先预演，不实际修改文件名：
+将所需脚本下载到 Windows 服务器，在其目录打开 PowerShell。示例根路径为虚构目录，请替换为经过确认的目标。先在复制的测试目录验证，再备份生产目录并选择低峰窗口执行。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Add-SecretLevel2Label.ps1 -RootPath "D:\共享文件\【商密二级】项目资料" -Preview
-```
-
-## 正式执行
-
-确认预演结果无误后执行：
+前缀版预演：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Add-SecretLevel2Label.ps1 -RootPath "D:\共享文件\【商密二级】项目资料"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Add-SecretLevel2Label.ps1 -RootPath 'D:\LabelDemo\项目资料' -Preview
 ```
 
-## 后缀标签版本
-
-示例：`1.txt` 会改成 `1_商密二级.txt`，文件夹 `资料` 会改成 `资料_商密二级`。
-
-这个版本已加入长路径处理，适合深层目录较多的 Windows Server 文件夹。
-
-先预演：
+后缀版预演（日志目录需预先存在且可写，放在被改名树以外）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Add-SecretLevel2Suffix.ps1 -RootPath "D:\共享文件\【商密二级】项目资料" -Preview
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Add-SecretLevel2Suffix.ps1 -RootPath 'D:\LabelDemo\项目资料' -Preview -LogPath 'D:\LabelLogs\suffix-failures.csv'
 ```
 
-确认无误后正式执行：
+核对预演输出后，保持其他参数不变，去掉 `-Preview` 正式执行。`-Preview` 是脚本自有参数，不是 `-WhatIf`。预演不改名，但后缀版遇到问题时仍可能写 CSV。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Add-SecretLevel2Suffix.ps1 -RootPath "D:\共享文件\【商密二级】项目资料"
-```
+## 行为和限制
 
-## 说明
+- 前缀版跳过名称已以指定前缀开头的项；后缀版跳过目录名或文件主名已以指定后缀结尾的项。两种规则不同，不自动互相转换。
+- 两版遇到目标重名均警告并跳过，不覆盖或合并。后缀版名称冲突仅显示警告，不写失败 CSV。
+- 后缀版先快照目录树，再改文件，最后按路径长度倒序改目录，避免上级改名使后续子路径失效。
+- 后缀版跳过扫描到的重解析点、目录联接和链接。根目录及其祖先未做完整链接校验；请只选择确认过的普通目录，运行时避免其他程序移动或替换目录。
+- 后缀版扫描失败、重命名失败会记录并继续；`Done.` 或正常退出不保证全部成功。CSV 仅在本次有问题时写出；无问题不会删除上次日志，建议每次使用不同日志名。
+- 日志路径是操作当时的路径，上级目录后续改名可能使其变化。CSV 含业务路径，应留在本机受控位置，不上传仓库。
+- 前缀版没有同等长路径、逐项容错或失败 CSV 能力。执行失败时可能已完成部分改名。
+- 标签不提供加密、访问控制或真正的 DLP 元数据标签。改名可能影响快捷方式、业务引用和正在打开的文件；恢复须依赖备份或另行核对的名称映射。
 
-- 脚本不会修改 `RootPath` 指定的顶层目录本身，只处理它下面的子文件和子文件夹。
-- 已经以 `【商密二级】` 开头的文件或文件夹会自动跳过。
-- 如果目标名称已存在，会跳过并输出警告，避免覆盖。
-- 如果路径过长，建议先在 Windows Server 2019 上开启 Win32 长路径支持。
+## 常见报错
+
+| 现象 | 排查方向 |
+| --- | --- |
+| 中文乱码、引号或括号解析错误 | 使用完整下载的脚本，不经富文本粘贴；脚本标签用 Unicode 字符码构造 |
+| `Get-ChildItem` 找不到深层路径 | 前缀版仍使用普通递归；后缀版已修复扫描环节，但也应检查目录是否被移动或无权限 |
+| Move 访问被拒绝 | 核对运行账号的文件和父目录权限、占用及防护策略，管理员身份不自动绕过所有限制 |
+| Target already exists | 人工确认重名文件，脚本不会覆盖 |
+| 文件名仍过长 | 扩展路径不能突破单个名称组件及文件系统本身限制，需缩短目录/文件名 |
+
+## 验证状态
+
+本次通过 PowerShell 语法解析并核对最新版来源。当前运行环境为 macOS，未执行 Windows 扩展路径改名；Windows Server 2019、PowerShell 5.1、UNC/SMB、权限和占用场景仍需在目标环境测试。公司真实文件、目录、错误日志及完整聊天记录未上传。
